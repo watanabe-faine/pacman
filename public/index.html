@@ -75,7 +75,7 @@ canvas { display: block; }
 .cast .role { color: var(--muted); font-size: 12px; }
 .cast b { font-weight: 400; color: var(--c); }
 .gh {
-  width: 18px; height: 18px; border-radius: 9px 9px 3px 3px;
+  width: 18px; height: 18px; border-radius: 0;
   background:
     radial-gradient(circle at 32% 45%, #fff 0 2.5px, transparent 3px),
     radial-gradient(circle at 68% 45%, #fff 0 2.5px, transparent 3px),
@@ -219,21 +219,36 @@ canvas { display: block; }
   const DIRS = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
   const NONE = { x: 0, y: 0 };
   const ORDER = [DIRS.up, DIRS.left, DIRS.down, DIRS.right]; // arcade tie-break order
-  const MODES = [7, 20, 7, 20, 5, 20, 5, Infinity];           // scatter / chase alternating (sec)
+  const MODES = [10, 12, 10, 12, 8, 15, 8, Infinity];           // scatter / chase alternating (sec)
   const COLORS = { wall: "#2a3cff", dot: "#ffcfa8", pac: "#ffd21f", door: "#ffb8de", fright: "#2236ff", frightFlash: "#f4f4ff", bg: "#05050c" };
-  const OYAJI = { skin: "#f7c58f", line: "#6b4423", hair: "#3a2a1a", nose: "#ff9a7a", blush: "rgba(255, 105, 105, 0.5)" };
-  const LIFE_SVG =
-    '<svg viewBox="-1 -1 2 2" width="18" height="18" aria-hidden="true">' +
-    '<path d="M0 0 L0.77 -0.17 A0.8 0.8 0 1 0 0.77 0.17Z" fill="#f7c58f" stroke="#6b4423" stroke-width="0.08"/>' +
-    '<path d="M-0.55 -0.35 A0.65 0.65 0 0 1 -0.1 -0.64" stroke="#3a2a1a" stroke-width="0.09" fill="none"/>' +
-    '<circle cx="0.12" cy="-0.36" r="0.17" fill="none" stroke="#6b4423" stroke-width="0.08"/>' +
-    '<ellipse cx="0.42" cy="-0.1" rx="0.32" ry="0.12" fill="#3a2a1a"/></svg>';
+  // 8x8 block sprites. Player: oyaji block head (comb-over, glasses, mustache). Pupils face right; mirrored for left.
+  const HEAD_TOP = ["sHsHsHss", "SSSSSSSS", "SHHSSHHS", "GWPGGWPG", "SSSNNSSS", "SMMMMMMS"];
+  const HEAD_CLOSED = HEAD_TOP.concat(["SSSSSSSS", "sSSSSSSs"]);
+  const HEAD_OPEN = HEAD_TOP.concat(["SmmmmmmS", "sSmmmmSs"]);
+  const HEAD_PAL = { H: "#3a2a1a", S: "#c99a6b", s: "#a77a4c", G: "#1c1c1c", W: "#ffffff", P: "#3646c8", N: "#a06a3e", M: "#3a2a1a", m: "#5a1a1a" };
+  // Ghosts: blocky mobs with two leg frames
+  const MOB_BODY = ["CCCCCCCC", "CDCCCCDC", "CWWCCWWC", "CWECCWEC", "CCCDCCCC", "CDCCCDCC", "CCCCCCCC"];
+  const MOB_SCARED = ["CCCCCCCC", "CDCCCCDC", "CCCCCCCC", "CFFCCFFC", "CCCCCCCC", "CFCFFCFC", "FCFCCFCF"];
+  const MOB_LEGS = ["CC.CC.CC", "C.CC.CC."];
+  function shade(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+    return "rgb(" + c(n >> 16) + "," + c((n >> 8) & 255) + "," + c(n & 255) + ")";
+  }
+  function spriteSVG(rows, pal, px) {
+    let s = '<svg viewBox="0 0 8 8" width="' + px + '" height="' + px + '" shape-rendering="crispEdges" aria-hidden="true">';
+    rows.forEach((r, y) => [...r].forEach((ch, x) => {
+      if (pal[ch]) s += '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + pal[ch] + '"/>';
+    }));
+    return s + "</svg>";
+  }
+  const LIFE_SVG = spriteSVG(HEAD_CLOSED, HEAD_PAL, 18);
 
   const GHOSTS = [
     { name: "blinky", color: "#ff2a2a", home: { x: 13, y: 11 }, start: "active", corner: { x: 25, y: -3 }, release: 0 },
-    { name: "pinky",  color: "#ffb3de", home: { x: 13, y: 14 }, start: "house",  corner: { x: 2,  y: -3 }, release: 1 },
-    { name: "inky",   color: "#2cf2ff", home: { x: 11, y: 14 }, start: "house",  corner: { x: 27, y: 31 }, release: 5 },
-    { name: "clyde",  color: "#ffb347", home: { x: 15, y: 14 }, start: "house",  corner: { x: 0,  y: 31 }, release: 9 },
+    { name: "pinky",  color: "#ffb3de", home: { x: 13, y: 14 }, start: "house",  corner: { x: 2,  y: -3 }, release: 3 },
+    { name: "inky",   color: "#2cf2ff", home: { x: 11, y: 14 }, start: "house",  corner: { x: 27, y: 31 }, release: 8 },
+    { name: "clyde",  color: "#ffb347", home: { x: 15, y: 14 }, start: "house",  corner: { x: 0,  y: 31 }, release: 14 },
   ];
   const FRUITS = [
     ["cherry", 100], ["berry", 300], ["orange", 500], ["orange", 500], ["apple", 700], ["apple", 700],
@@ -397,14 +412,14 @@ canvas { display: block; }
 
   function addScore(n) {
     S.score += n;
-    if (S.score >= S.nextLife) { S.reserves++; S.nextLife = Infinity; Sound.life(); }
+    if (S.score >= S.nextLife) { S.reserves++; S.nextLife += 10000; Sound.life(); }
     if (S.score > S.hi) S.hi = S.score;
     updateHud();
   }
 
   function newGame() {
     Sound.init();
-    Object.assign(S, { score: 0, level: 1, reserves: 2, nextLife: 10000, overShown: false, paused: false, startHi: S.hi });
+    Object.assign(S, { score: 0, level: 1, reserves: 4, nextLife: 10000, overShown: false, paused: false, startHi: S.hi });
     resetLevel(); resetActors();
     S.state = "ready"; S.timer = 2.6;
     showMsg("READY!");
@@ -446,15 +461,15 @@ canvas { display: block; }
     return g.path.length === 0;
   }
 
-  const levelSpeed = () => 8 * Math.min(1 + (S.level - 1) * 0.05, 1.2);
-  const pacSpeed = () => levelSpeed() * (S.fright > 0 ? 0.95 : 0.88);
+  const levelSpeed = () => 8 * Math.min(1 + (S.level - 1) * 0.03, 1.1);
+  const pacSpeed = () => levelSpeed() * (S.fright > 0 ? 1 : 0.95);
   function ghostSpeed(g) {
     if (g.state === "eyes" || g.state === "entering") return 15;
     const base = levelSpeed();
-    if (Math.round(g.y) === 14 && (g.x < 5.5 || g.x > 21.5)) return base * 0.5;
-    if (g.fright) return base * 0.55;
-    if (g.state === "leaving" || g.state === "house") return base * 0.5;
-    return base * 0.92;
+    if (Math.round(g.y) === 14 && (g.x < 5.5 || g.x > 21.5)) return base * 0.4;
+    if (g.fright) return base * 0.45;
+    if (g.state === "leaving" || g.state === "house") return base * 0.4;
+    return base * 0.72;
   }
 
   // ---------- Pac-Man ----------
@@ -494,7 +509,7 @@ canvas { display: block; }
   }
 
   function startFright() {
-    const dur = Math.max(1, 6.5 - (S.level - 1) * 0.6);
+    const dur = Math.max(5, 10 - (S.level - 1) * 0.5);
     S.fright = dur; S.combo = 0;
     for (const g of ghosts) {
       if (g.state === "eyes" || g.state === "entering") continue;
@@ -570,7 +585,7 @@ canvas { display: block; }
       if (g.state !== "active") continue;
       let dx = Math.abs(g.x - pac.x);
       dx = Math.min(dx, W - dx);
-      if (dx < 0.6 && Math.abs(g.y - pac.y) < 0.6) {
+      if (dx < 0.45 && Math.abs(g.y - pac.y) < 0.45) {
         if (g.fright) {
           g.fright = false; g.state = "eyes";
           S.combo++;
@@ -670,62 +685,32 @@ canvas { display: block; }
     if (x > W - 2) fn(x - W);
   }
 
-  // Oyaji: drawn facing right in local space (bald comb-over, glasses, bushy mustache on the upper jaw)
-  function drawOyaji(cx, cy, a, m, mirror, showFace) {
-    const r = 0.8;
-    ctx.save();
-    ctx.translate(cx, cy);
-    if (mirror) ctx.scale(-1, 1); else ctx.rotate(a);
-    ctx.lineCap = "round";
-    ctx.fillStyle = OYAJI.skin; ctx.strokeStyle = OYAJI.line; ctx.lineWidth = 0.06;
-    // ear
-    ctx.beginPath(); ctx.arc(-0.74, 0.06, 0.17, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    // head with mouth
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r, m, Math.PI * 2 - m); ctx.closePath(); ctx.fill(); ctx.stroke();
-    if (showFace) {
-      // barcode comb-over
-      ctx.strokeStyle = OYAJI.hair; ctx.lineWidth = 0.06;
-      for (const rr of [0.74, 0.65, 0.56]) {
-        ctx.beginPath(); ctx.arc(0, 0, rr, -Math.PI * 0.95, -Math.PI * 0.6); ctx.stroke();
-      }
-      // eyebrow
-      ctx.lineWidth = 0.1;
-      ctx.beginPath(); ctx.moveTo(-0.04, -0.6); ctx.lineTo(0.27, -0.57); ctx.stroke();
-      // glasses + eye
-      ctx.strokeStyle = OYAJI.line; ctx.lineWidth = 0.06;
-      ctx.beginPath(); ctx.arc(0.12, -0.36, 0.16, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-0.04, -0.34); ctx.lineTo(-0.58, -0.22); ctx.stroke();
-      ctx.fillStyle = OYAJI.hair;
-      ctx.beginPath(); ctx.arc(0.15, -0.36, 0.055, 0, Math.PI * 2); ctx.fill();
-      // blush on the lower jaw
-      ctx.fillStyle = OYAJI.blush;
-      ctx.beginPath(); ctx.arc(-0.08, 0.32, 0.15, 0, Math.PI * 2); ctx.fill();
-      // nose and mustache ride on the upper jaw
-      ctx.save();
-      ctx.rotate(-m);
-      ctx.fillStyle = OYAJI.nose; ctx.strokeStyle = OYAJI.line; ctx.lineWidth = 0.05;
-      ctx.beginPath(); ctx.arc(0.62, -0.2, 0.13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = OYAJI.hair;
-      ctx.beginPath(); ctx.ellipse(0.46, -0.07, 0.3, 0.1, -0.12, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(0.24, -0.04, 0.16, 0.09, 0.3, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
+  function drawSprite(rows, pal, cx, cy, size, mirror) {
+    const n = 8, px = size / n, x0 = cx - size / 2, y0 = cy - size / 2;
+    for (let r = 0; r < rows.length; r++) for (let c = 0; c < n; c++) {
+      const col = pal[rows[r][mirror ? n - 1 - c : c]];
+      if (!col) continue;
+      ctx.fillStyle = col;
+      ctx.fillRect(x0 + c * px - 0.004, y0 + r * px - 0.004, px + 0.008, px + 0.008);
     }
-    ctx.restore();
   }
 
   function drawPac() {
     if (S.state === "play" && S.freeze > 0) return;
-    let m, a = Math.atan2(pac.face.y, pac.face.x), mirror = pac.face.x < 0, showFace = true;
-    if (S.state === "dying") {
-      if (S.timer < 0.8) m = 0.3;
-      else {
-        const p = (S.timer - 0.8) / 1.5;
-        if (p >= 1) return;
-        a = -Math.PI / 2; mirror = false; m = 0.3 + p * (Math.PI - 0.3); showFace = p < 0.45;
-      }
-    } else if (S.state === "ready" || S.state === "clear" || S.state === "title") m = 0.02;
-    else m = 0.04 + 0.5 * Math.abs(Math.sin(pac.anim));
-    drawWrapped(pac.x, (x) => drawOyaji(x + 0.5, pac.y + 0.5, a, m, mirror, showFace));
+    let size = 1.5, spin = 0, open = false;
+    if (S.state === "dying" && S.timer >= 0.8) {
+      const p = (S.timer - 0.8) / 1.5;
+      if (p >= 1) return;
+      size = 1.5 * (1 - p); spin = p * Math.PI * 3;
+    } else if (S.state === "play" && (pac.dir.x || pac.dir.y)) open = Math.sin(pac.anim) > 0;
+    const rows = open ? HEAD_OPEN : HEAD_CLOSED, mirror = pac.face.x < 0;
+    drawWrapped(pac.x, (x) => {
+      ctx.save();
+      ctx.translate(x + 0.5, pac.y + 0.5);
+      if (spin) ctx.rotate(spin);
+      drawSprite(rows, HEAD_PAL, 0, 0, size, mirror);
+      ctx.restore();
+    });
   }
 
   function drawGhost(g) {
@@ -733,44 +718,16 @@ canvas { display: block; }
     const eyesOnly = g.state === "eyes" || g.state === "entering";
     let body = g.color;
     if (frightened) body = S.fright < 2 && Math.floor(S.clock * 6) % 2 === 0 ? COLORS.frightFlash : COLORS.fright;
-    drawWrapped(g.x, (x) => {
-      const cx = x + 0.5, cy = g.y + 0.5, r = 0.78;
-      if (!eyesOnly) {
-        const bottom = cy + 0.78, n = 3, w = (2 * r) / n, ph = Math.floor(S.clock * 8) % 2;
-        ctx.fillStyle = body;
-        ctx.beginPath();
-        ctx.arc(cx, cy - 0.08, r, Math.PI, 0);
-        ctx.lineTo(cx + r, bottom);
-        for (let i = 0; i < n; i++) {
-          const x1 = cx + r - (i + 1) * w;
-          ctx.quadraticCurveTo(cx + r - (i + 0.5) * w, bottom - (ph ? 0.5 : 0.3), x1, bottom);
-        }
-        ctx.closePath();
-        ctx.fill();
-      }
-      if (frightened) {
-        const fc = body === COLORS.fright ? "#ffcfa8" : "#ff3b3b";
-        ctx.fillStyle = fc;
-        ctx.fillRect(cx - 0.32, cy - 0.25, 0.16, 0.18);
-        ctx.fillRect(cx + 0.16, cy - 0.25, 0.16, 0.18);
-        ctx.strokeStyle = fc; ctx.lineWidth = 0.08;
-        ctx.beginPath();
-        for (let i = 0; i <= 6; i++) {
-          const px = cx - 0.48 + i * 0.16, py = cy + 0.28 + (i % 2 ? -0.1 : 0.04);
-          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-        }
-        ctx.stroke();
-        return;
-      }
-      const d = g.dir;
-      for (const s of [-1, 1]) {
-        const ex = cx + s * 0.3 + d.x * 0.08, ey = cy - 0.15 + d.y * 0.08;
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath(); ctx.ellipse(ex, ey, 0.21, 0.27, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#1f2fe0";
-        ctx.beginPath(); ctx.arc(ex + d.x * 0.1, ey + d.y * 0.12, 0.11, 0, Math.PI * 2); ctx.fill();
-      }
-    });
+    const legs = MOB_LEGS[Math.floor(S.clock * 8) % 2];
+    let rows, pal;
+    if (eyesOnly) { rows = MOB_BODY; pal = { W: "#ffffff", E: "#1f2fe0" }; }
+    else if (frightened) {
+      rows = MOB_SCARED.concat([legs]);
+      const face = body === COLORS.fright ? "#ffcfa8" : "#ff3b3b";
+      pal = { C: body, D: shade(body === COLORS.fright ? "#2236ff" : "#f4f4ff", 0.8), F: face };
+    } else { rows = MOB_BODY.concat([legs]); pal = { C: body, D: shade(body, 0.72), W: "#ffffff", E: "#111111" }; }
+    const mirror = g.dir.x < 0;
+    drawWrapped(g.x, (x) => drawSprite(rows, pal, x + 0.5, g.y + 0.5, 1.5, mirror));
   }
 
   function drawFruit(kind, cx, cy) {
@@ -843,7 +800,13 @@ canvas { display: block; }
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const c = grid[y][x];
       if (c === ".") ctx.fillRect(x + 0.38, y + 0.38, 0.24, 0.24);
-      else if (c === "o" && blink) { ctx.beginPath(); ctx.arc(x + 0.5, y + 0.5, 0.4, 0, Math.PI * 2); ctx.fill(); }
+      else if (c === "o" && blink) {
+        // gem block
+        ctx.fillStyle = "#4ef2e0"; ctx.fillRect(x + 0.15, y + 0.15, 0.7, 0.7);
+        ctx.fillStyle = "#c8fff8"; ctx.fillRect(x + 0.15, y + 0.15, 0.25, 0.25);
+        ctx.fillStyle = "#1a9c94"; ctx.fillRect(x + 0.6, y + 0.6, 0.25, 0.25);
+        ctx.fillStyle = COLORS.dot;
+      }
     }
 
     if (S.fruit) drawFruit(S.fruit.kind, 14, 17.5);
